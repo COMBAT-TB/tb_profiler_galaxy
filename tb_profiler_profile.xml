@@ -1,0 +1,186 @@
+<tool id="tb_profiler_profile" name="TB-Profiler" version="@TOOL_VERSION@+galaxy0">
+    <description>Profiling tool for Mycobacterium tuberculosis to detect resistance and strain type from WGS data</description>
+    <macros>
+        <import>macros.xml</import>
+    </macros>
+    <expand macro="requirements" />
+    <command detect_errors="exit_code"><![CDATA[
+        #if str($input.selector) in ("paired_fastq", "paired_collection_fastq", "single_fastq")
+            #if str($input.selector) == "paired_fastq"
+                #set r1_ext = $input.fastq1.extension
+                #set r2_ext = $input.fastq2.extension
+                ln -s '$input.fastq1' fastq_r1.'$r1_ext' &&
+                ln -s '$input.fastq2' fastq_r2.'$r2_ext' &&
+            #else if str($input.selector) == "single_fastq"
+                #set r1_ext = $input.fastq.extension
+                ln -s '$input.fastq' fastq_r1.'$r1_ext' &&
+            #else if str($input.selector) == "paired_collection_fastq"
+                #set r1_ext = $input.fastq_collection.forward.extension
+                #set r2_ext = $input.fastq_collection.reverse.extension
+                ln -s '$input.fastq_collection.forward' fastq_r1.'$r1_ext' &&
+                ln -s '$input.fastq_collection.reverse' fastq_r2.'$r2_ext' &&
+            #end if
+        #else if str($input.selector) == "bam"
+            ln -s '$input.bam' input.bam &&
+        #end if
+        
+        #if str($input.selector) == "paired_collection_fastq"
+            #set profile_name = $input.fastq_collection.name
+        #else if str($input.selector) == "paired_fastq"
+            #set profile_name = $input.fastq1.name
+        #else if str($input.selector) == "single_fastq"
+            #set profile_name = $input.fastq.name
+        #else if str($input.selector) == "bam"
+            #set profile_name = $input.bam.name
+        #end if
+
+        tb-profiler profile -p '$profile_name'
+        --platform $platform
+        #if str($input.selector) in ("paired_fastq", "paired_collection_fastq", "single_fastq")
+            -1 fastq_r1.'$r1_ext'
+        #end if
+        #if str($input.selector) in ("paired_fastq", "paired_collection_fastq")
+            -2 fastq_r2.'$r1_ext'
+        #else if str($input.selector) == "bam"
+            --bam input.bam
+        #end if
+        #if $output_format == "pdf"
+            --pdf
+        #else if $output_format == "txt"
+            --txt
+        #end if
+        #if $advanced.options == 'yes'
+            $advanced.call_method
+            $advanced.min_gene_frac
+        #end if
+        && mv results/'$profile_name'.results.json '$tbprofile_json'
+        && mv bam/'$profile_name'.bam '$output_bam'
+        && bcftools view -Ov '$output_vcf' vcf/'$profile_name'.targets.csq.bcf 
+        #if $output_format == "pdf"
+            && mv results/'$profile_name'.results.pdf '$output_pdf'
+        #else if $output_format == "txt"
+            && mv results/'$profile_name'.results.txt '$output_txt'
+        #end if 
+    ]]></command>
+    <inputs>
+        <conditional label="Input type" name="input">
+            <param label="Input format" name="selector" type="select">
+                <option value="paired_fastq">Paired Fastq</option>
+                <option value="paired_collection_fastq">Paired Collection Fastq</option>
+                <option value="single_fastq">Single Fastq</option>
+                <option value="bam">BAM</option>
+            </param>
+            <when value="paired_fastq">
+                <param label="Reads1" type="data" name="fastq1" format="fastq,fastq.gz,fastqsanger,fastqsanger.gz" />
+                <param label="Reads2" type="data" name="fastq2" format="fastq,fastq.gz,fastqsanger,fastqsanger.gz" />
+            </when>
+            <when value="paired_collection_fastq">
+                <param label="Reads (collection)" name="fastq_collection" type="data_collection" collection_type="paired" format="fastq,fastq.gz,fastqsanger,fastqsanger.gz" />
+            </when>
+            <when value="single_fastq">
+                <param label="Reads" name="fastq" type="data" format="fastq,fastq.gz,fastqsanger,fastqsanger.gz" />
+            </when>
+            <when value="bam">
+                <param label="Input BAM" name="bam" type="data" format="bam" help="Aligned reads in BAM format, must be aligned to the Ensembl H37Rv reference sequence" />
+            </when>
+        </conditional>
+        <param name="output_format" label="Output format" type="select">
+            <option value="pdf">PDF</option>
+            <option value="txt">Text</option>
+        </param>
+        <param argument="--platform" type="select" label="Sequencing platform">
+            <option value="Illumina">Illumina</option>
+            <option value="minION">MinION</option>
+        </param>
+        <conditional name="advanced">
+            <param label="Select advanced options" type="select" name="options">
+                <option value="yes">Yes</option>
+                <option value="no" selected="true">No</option>
+            </param>
+            <when value="no">
+            </when>
+            <when value="yes">
+                <param label="Quality required for calls to be accepted" type="select" argument="--call_method">
+                    <option value="low" selected="true">Low</option>
+                    <option value="high">High</option>
+                    <option value="optimise">Optimise</option>
+                </param>
+                <param label="Minimum coverage fraction to infer deletion" type="float"
+                        help="Used to infer a deletion if the fraction of a gene covered falls below this value."
+                        argument="--min_gene_frac" value="0.9" />
+            </when>
+        </conditional>
+    </inputs>
+    <outputs>
+        <data format="json" name="tbprofile_json" label="${tool.name} JSON on ${on_string}" />
+        <data format="vcf" name="output_vcf" label="${tool.name} VCF on ${on_string}" />
+        <data format="bam" name="output_bam" label="${tool.name} BAM on ${on_string}" />
+        <data format="pdf" name="output_pdf" label="${tool.name} PDF report on ${on_string}">
+            <filter>output_format == 'pdf'</filter>
+        </data>
+        <data format="txt" name="output_txt" label="${tool.name} report on ${on_string}">
+            <filter>output_format == 'txt'</filter>
+        </data>
+    </outputs>
+    <help><![CDATA[
+usage: tb-profiler profile [-h] [--platform {Illumina,minION}] [--read1 READ1]
+                           [--read2 READ2] [--bam BAM] [--prefix PREFIX]
+                           [--call_method {low,high,optimise}]
+                           [--min_depth MIN_DEPTH] [--threads THREADS]
+                           [--caller {BCFtools}]
+                           [--mapper {bwa,minimap2,bowtie2}] [--dir DIR]
+                           [--db DB] [--format {classic,new,tex}]
+                           [--verbose {0,1,2}] [--min_gene_frac MIN_GENE_FRAC]
+                           [--txt] [--pdf] [--html] [--plot_cov]
+                           [--add_columns ADD_COLUMNS] [--meta META]
+                           [--webserver] [--delly]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --platform {Illumina,minION}, -m {Illumina,minION}
+                        NGS Platform (default: Illumina)
+  --read1 READ1, -1 READ1
+                        First read file (default: None)
+  --read2 READ2, -2 READ2
+                        Second read file (default: None)
+  --bam BAM, -a BAM     Second read file (default: None)
+  --prefix PREFIX, -p PREFIX
+                        Sample prefix (default: tbprofiler)
+  --call_method {low,high,optimise}
+                        Level of quality stringency required. (default: low)
+  --min_depth MIN_DEPTH
+                        Minimum depth required to call variant. Bases with
+                        depth below this cutoff will be marked as missing
+                        (default: 10)
+  --threads THREADS, -t THREADS
+                        Threads (default: 1)
+  --caller {BCFtools}   Variant calling tool to use. Currently only BCFtools
+                        supported (default: BCFtools)
+  --mapper {bwa,minimap2,bowtie2}
+                        Mapping tools to use (default: bwa)
+  --dir DIR, -d DIR     Storage directory (default: .)
+  --db DB               Mutation panel name (default: tbdb panel) (default:
+                        tbdb)
+  --format {classic,new,tex}, -f {classic,new,tex}
+                        Output format [classic,new,tex] (default: classic)
+  --verbose {0,1,2}, -v {0,1,2}
+                        Verbosity increases from 0 to 2 (default: 0)
+  --min_gene_frac MIN_GENE_FRAC
+                        Used to infer a deletion if the fraction of a gene
+                        covered falls below this value. Also used to see if
+                        sample is high quality to continue by checking the
+                        fraction for rpoB (where deletion should not occur).
+                        (default: 0.9)
+  --txt                 Add text output (default: False)
+  --pdf                 Add PDF output. This requires pdflatex to be installed
+                        (default: False)
+  --html                Add HTML output (default: False)
+  --plot_cov            Not used (default: False)
+  --add_columns ADD_COLUMNS
+                        Meta file (default: None)
+  --meta META           Meta file (default: None)
+  --webserver           Webserver root (default: False)
+  --delly               Webserver root (default: False)
+    ]]></help>
+    <expand macro="citations" />
+</tool>
