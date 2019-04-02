@@ -24,17 +24,7 @@
             ln -s '$input.bam' input.bam &&
         #end if
         
-        #if str($input.selector) == "paired_collection_fastq"
-            #set profile_name = $input.fastq_collection.name
-        #else if str($input.selector) == "paired_fastq"
-            #set profile_name = $input.fastq1.name
-        #else if str($input.selector) == "single_fastq"
-            #set profile_name = $input.fastq.name
-        #else if str($input.selector) == "bam"
-            #set profile_name = $input.bam.name
-        #end if
-
-        tb-profiler profile -p '$profile_name'
+        tb-profiler profile 
         --platform $platform
         #if str($input.selector) in ("paired_fastq", "paired_collection_fastq", "single_fastq")
             -1 fastq_r1.'$r1_ext'
@@ -53,15 +43,15 @@
             $advanced.call_method
             $advanced.min_gene_frac
         #end if
-        && mv results/'$profile_name'.results.json '$tbprofile_json'
+	&& mv results/tbprofiler.results.json $tbprofile_json
         #if str($input.selector) != "bam"
-            && mv bam/'$profile_name'.bam '$output_bam'
+	  && mv bam/tbprofiler.bam $output_bam
         #end if
-        && bcftools view -Ov -o'$output_vcf' vcf/'$profile_name'.targets.csq.bcf 
+	&& bcftools view -Ov -o$output_vcf vcf/tbprofiler.targets.csq.bcf
         #if $output_format == "pdf"
-            && mv results/'$profile_name'.results.pdf '$output_pdf'
+	  && mv results/tbprofiler.results.pdf $output_pdf
         #else if $output_format == "txt"
-            && mv results/'$profile_name'.results.txt '$output_txt'
+	  && mv results/tbprofiler.results.txt $output_txt
         #end if 
     ]]></command>
     <inputs>

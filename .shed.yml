@@ -1,0 +1,13 @@
+categories:
+  - Sequence Analysis
+description: Profiling tool for Mycobacterium tuberculosis to detect resistance and strain type from WGS data
+homepage_url: https://github.com/jodyphelan/TBProfiler
+long_description: |
+  The TBProfiler pipeline aligns reads to the H37Rv reference using BWA (for Illumina data) or 
+  minimap2 (for MinION data) and then calls variants using BCFtools. These variants are then compared
+  to a drug-resistance database.  We also predict the number of reads supporting drug resistance 
+  variants as an insight into hetero-resistance (not applicable for MinION data).
+name: tb_profiler_profile
+owner: sanbi-uwc
+remote_repository_url: https://github.com/COMBAT-TB/tb_profiler_galaxy
+type: unrestricted
